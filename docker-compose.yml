@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  bnb-intel-dev:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    # runtime: intel-container-runtime
+    privileged: true
+    network_mode: host
+    pid: host
+    cap_add:
+      - SYS_ADMIN
+      - SYS_PTRACE
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    shm_size: '80gb'
+    volumes:
+      - /home/sdp/src:/workspace/src
+      - /home/sdp/.bash_history:/root/.bash_history
+    devices:
+      - /dev/dri:/dev/dri
+    command: >
+      bash -c "pip install --no-deps -e /workspace/src/bnb &&
+               pip install --no-deps -e /workspace/src/bnb_intel &&
+               sleep infinity"
