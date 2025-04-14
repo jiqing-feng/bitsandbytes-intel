@@ -91,13 +91,7 @@ jobs:
           
       - name: Test import works
         run: |
-          python -c "
-          import bitsandbytes
-          print('✅ bitsandbytes import successful')
-          import bnb_intel
-          print('✅ bnb_intel import successful')
-          print('✅ All imports successful')
-          "
+          python -m bitsandbytes_intel
       
       # - name: Test with pytest
       #   run: pytest
