@@ -10,7 +10,6 @@ from bitsandbytes.functional import (
     create_dynamic_map,
     get_4bit_type,
 )
-from bitsandbytes.utils import reverse_4bit_compress_format
 
 try:
     # to support Intel CPU/GPU (XPU) backend
@@ -67,6 +66,15 @@ def _maybe_torch_compile(func):
             options.update({"fx_graph_cache": True})
         return torch.compile(func, dynamic=True, options=options)
     return func
+
+
+def reverse_4bit_compress_format(weight):
+    out_1 = torch.empty(weight.size(0), dtype=torch.int32, device=weight.device)
+    out_2 = torch.empty(weight.size(0), dtype=torch.int32, device=weight.device)
+    out_1 = (weight & 0xF0) >> 4
+    out_2 = (weight & 0xF) << 4
+    out = out_1 | out_2
+    return out
 
 
 @_maybe_torch_compile
