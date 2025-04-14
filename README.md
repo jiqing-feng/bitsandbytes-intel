@@ -9,7 +9,7 @@ Registration for Intel optimized bitsandbytes operators.
 docker compose run --build --rm bnb-intel-dev /bin/bash
 
 # Run validation (inside container):
-python -m bitsandbytes-intel
+python -m bitsandbytes_intel
 ```
 
 ## Testing
