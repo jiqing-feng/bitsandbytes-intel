@@ -8,7 +8,7 @@ def main():
 
     try:
         A = torch.randint(-128, 127, (32, 64), dtype=torch.int8).to("xpu")
-        B = torch.randint(-128, 127, (64, 128), dtype=torch.int8).to("xpu")
+        B = torch.randint(-128, 127, (128, 64), dtype=torch.int8).to("xpu")
 
         result = torch.ops.bitsandbytes.int8_linear_matmul(A, B)
         # Simple output verification

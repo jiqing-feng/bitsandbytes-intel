@@ -6,5 +6,5 @@ setup(
     package_dir={"": "src"},
     packages=find_packages(where="src"),
     install_requires=["bitsandbytes"],
-    entry_points={"torch.backends": ["bitsandbytes_intel = bitsandbytes_intel:_autoload"]},
+    entry_points={"bitsandbytes.backends": ["bitsandbytes_intel = bitsandbytes_intel:_autoload"]},
 )
