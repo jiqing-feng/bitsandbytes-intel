@@ -1,4 +1,5 @@
 import sys
+
 import torch
 
 
@@ -18,7 +19,7 @@ def main():
         sys.exit(0)
 
     except Exception as e:
-        print(f"\n❌ Test failed: {str(e)}")
+        print(f"\n❌ Test failed: {e!s}")
         sys.exit(1)
 
 

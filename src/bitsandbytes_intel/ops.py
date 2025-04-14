@@ -8,9 +8,7 @@ def register_ops():
 
     # Check if the operator exists
     if not hasattr(torch.ops.bitsandbytes, "int8_linear_matmul"):
-        raise RuntimeError(
-            "bitsandbytes::int8_linear_matmul not found! Make sure bitsandbytes is installed"
-        )
+        raise RuntimeError("bitsandbytes::int8_linear_matmul not found! Make sure bitsandbytes is installed")
 
     @torch.library.impl("bitsandbytes::int8_linear_matmul", "XPU")
     def int8_linear_matmul_xpu(A: torch.Tensor, B: torch.Tensor):

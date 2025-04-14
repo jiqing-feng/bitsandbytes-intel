@@ -1,10 +1,10 @@
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
 setup(
-    name="bnb_intel",
+    name="bitsandbytes-intel",
     version="0.1",
     package_dir={"": "src"},
     packages=find_packages(where="src"),
     install_requires=["bitsandbytes"],
-    entry_points={"torch.backends": ["bnb_intel = bnb_intel:_autoload"]},
+    entry_points={"bitsandbytes.backends": ["bitsandbytes_intel = bitsandbytes_intel:_autoload"]},
 )

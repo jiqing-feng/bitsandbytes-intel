@@ -1,0 +1,85 @@
+[build-system]
+requires = ["setuptools >= 63.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bitsandbytes-intel"
+version = "0.0.1.dev0"
+description = "Intel-optimized version of bitsandbytes"
+readme = "README.md"
+maintainers = [
+    {name="Titus von Köller", email="titus@huggingface.co"},
+    {name="Matthew Douglas", email="matthew.douglas@huggingface.co"}
+]
+license = {text = "MIT"}
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: MIT License",
+    "Environment :: GPU :: NVIDIA CUDA :: 11",
+    "Environment :: GPU :: NVIDIA CUDA :: 12",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: C++",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence"
+]
+requires-python = ">=3.9"
+dependencies = [
+    "numpy>=1.20.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "build>=1.0.0,<2",
+    "ruff==0.11.2",
+    "pre-commit>=3.5.0,<4",
+    "wheel>=0.42,<1"
+]
+test = [
+    "pytest~=8.3",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/bitsandbytes-foundation/bitsandbytes-intel"
+"Bug Tracker" = "https://github.com/bitsandbytes-foundation/bitsandbytes-intel/issues"
+
+[tool.setuptools]
+packages = ["bitsandbytes_intel"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+
+[tool.ruff]
+src = [
+    "bitsandbytes",
+    "tests",
+    "benchmarking"
+]
+target-version = "py39"
+line-length = 119
+
+[tool.ruff.lint]
+select = [
+    "B",    # bugbear: security warnings
+    "E",    # pycodestyle (error)
+    "W",    # pycodestyle (warning)
+    "F",    # pyflakes
+    "I",    # isort
+    "ISC",  # implicit string concatenation
+    "UP",   # alert you when better syntax is available in your python version
+    "RUF",  # the ruff developer's own rules
+]
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+detect-same-package = true
+force-sort-within-sections = true
+known-first-party = ["bitsandbytes", "bitsandbytes_intel"]
