@@ -5,10 +5,7 @@ Registration for Intel optimized bitsandbytes operators.
 ## Quick Start
 
 ```
-# Build and enter container
-docker compose run --build --rm bnb-intel-dev /bin/bash
-
-# Run validation (inside container):
+# Run validation:
 python -m bitsandbytes_intel
 ```
 
@@ -46,6 +43,15 @@ int8_linear_matmul_xpu called with tensors of shape: torch.Size([32, 64]) torch.
   dispatch key: XPU
   previous kernel: registered at /pytorch/build/aten/src/ATen/RegisterCPU.cpp:30477
        new kernel: registered at /build/intel-pytorch-extension/build/Release/csrc/gpu/csrc/aten/generated/ATen/RegisterXPU.cpp:468 (function operator())
+```
+
+# Docker
+
+**TODO**: the docker compose setup needs debugging, as we got everything to work outside the container, but in the container it's weirdly still looking for `bnb_intel` as a torch extension. Sth to fix for another day.
+
+```
+# Build and enter container
+docker compose run --build --rm bnb-intel-dev /bin/bash
 ```
 
 ## Technical Implementation
