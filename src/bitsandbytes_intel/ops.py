@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+import math
 
 import torch
 
@@ -44,6 +45,36 @@ def register_ops():
         raise NotImplementedError
 
     print("Successfully registered XPU implementation")
+
+    print("Registering HPU implementations")
+
+    @torch.library.impl("bitsandbytes::dequantize_4bit", "HPU")
+    def dequantize_4bit_hpu(
+        A: torch.Tensor,
+        absmax: torch.Tensor,
+        blocksize: int,
+        quant_type: str,
+        shape: Sequence[int],
+        dtype: torch.dtype,
+    ) -> torch.Tensor:
+        out_shape = (math.prod(shape),)
+        out_dq = torch.ops.hpu.dequantize_nf4(
+            input,
+            absmax,
+            blocksize,
+            out_shape=out_shape,
+            out_dtype=dtype,
+        )
+        output = out_dq.reshape(shape).T
+        return output
+
+    @torch.library.impl("bitsandbytes::quantize_4bit", "HPU")
+    def quantize_4bit_hpu(
+        A: torch.Tensor, blocksize: int, quant_type: str, quant_storage: torch.dtype
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        raise NotImplementedError
+
+    print("Successfully registered HPU implementations")
 
 
 print("ops module loaded")
