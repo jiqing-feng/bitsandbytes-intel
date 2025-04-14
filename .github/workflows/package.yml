@@ -91,7 +91,13 @@ jobs:
           
       - name: Test import works
         run: |
-          python -m bitsandbytes_intel
+          python -c "
+          import bitsandbytes
+          print('✅ bitsandbytes import successful')
+          import bitsandbytes_intel
+          print('✅ bitsandbytes_intel import successful')
+          print('✅ All imports successful - no XPU operations tested, as for that we would need to configure the XPU runner..')
+          "
       
       # - name: Test with pytest
       #   run: pytest
