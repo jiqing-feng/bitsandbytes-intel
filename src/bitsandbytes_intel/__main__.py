@@ -2,6 +2,8 @@ import sys
 
 import torch
 
+import bitsandbytes  # noqa
+
 
 def main():
     print("🧪 Running minimal XPU backend test...")
