@@ -1,6 +1,6 @@
-# `bnb_intel` XPU Backend Demo
+# `bitsandbytes` Intel Backend
 
-Experimental out-of-tree backend registration for bitsandbytes operators.
+Registration for Intel optimized bitsandbytes operators.
 
 ## Quick Start
 
@@ -9,7 +9,7 @@ Experimental out-of-tree backend registration for bitsandbytes operators.
 docker compose run --build --rm bnb-intel-dev /bin/bash
 
 # Run validation (inside container):
-python -m bnb_intel
+python -m bitsandbytes-intel
 ```
 
 ## Testing
@@ -94,8 +94,8 @@ Successfully registered XPU implementation
 ## Technical Implementation
 
 Key files:
-- `src/bnb_intel/ops.py` - XPU kernel registration
-- `src/bnb_intel/__init__.py` - Autoload setup
+- `src/bitsandbytes_intel/ops.py` - Intel kernel registration
+- `src/bitsandbytes_intel/__init__.py` - Autoload setup
 - `docker-compose.yml` - Build environment
 - `setup.py` - Package configuration
 
@@ -103,7 +103,3 @@ Uses PyTorch's autoload mechanism to register:
 ```
 @torch.library.impl("bitsandbytes::int8_linear_matmul", "XPU")
 ```
-
----
-
-*Internal prototype - Not for external use*

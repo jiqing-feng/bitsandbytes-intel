@@ -32,7 +32,9 @@ classifiers = [
 ]
 requires-python = ">=3.9"
 dependencies = [
+    "bitsandbytes",
     "numpy>=1.20.0",
+    "torch>=2.2,<3",
 ]
 
 [project.optional-dependencies]
@@ -76,6 +78,9 @@ select = [
     "ISC",  # implicit string concatenation
     "UP",   # alert you when better syntax is available in your python version
     "RUF",  # the ruff developer's own rules
+]
+ignore = [
+    "B028",  # no-explicit-stacklevel
 ]
 
 [tool.ruff.lint.isort]
