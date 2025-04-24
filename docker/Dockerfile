@@ -35,12 +35,11 @@ RUN pip install --no-cache-dir \
     ruff
 
 # Then install PyTorch-dependent packages with constraint to use existing torch
-RUN pip install --no-cache-dir \
-    --extra-index-url https://download.pytorch.org/whl/xpu \
-    -C torch==2.6.0+xpu \
-    transformers \
-    accelerate \
-    bitsandbytes
+RUN pip install transformers accelerate bitsandbytes
+
+# Copy the bitsandbytes-intel repository into /workspace/src/bnb and install it.
+COPY .. ${WORKSPACE}/src/bnb
+RUN cd ${WORKSPACE}/src/bnb && pip install .
 
 COPY --chmod=755 docker/entrypoint.sh /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
