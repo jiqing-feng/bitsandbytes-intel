@@ -483,9 +483,7 @@ def quantize_4bit_impl(
     blocks = n // blocksize
     blocks += 1 if n % blocksize > 0 else 0
     absmax = torch.zeros((blocks,), device=A.device, dtype=A.dtype)
-
-    if out is None:
-        out = torch.zeros(((n + 1) // 2), dtype=torch.uint8, device=A.device)
+    out = torch.zeros(((n + 1) // 2), dtype=torch.uint8, device=A.device)
 
     rem = n % blocksize
     has_rem = rem > 0
