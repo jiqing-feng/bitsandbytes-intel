@@ -687,22 +687,24 @@ def gemm_4bit_impl(
     return out
 
 
-def dequantize_blockwise(
+# Currently only works for XPU
+def dequantize_blockwise_ipex_impl(
     A: torch.Tensor,
-    absmax: Optional[torch.Tensor] = None,
-    code: Optional[torch.Tensor] = None,
-    out: Optional[torch.Tensor] = None,
-    blocksize: int = 4096,
+    absmax: torch.Tensor,
+    code: torch.Tensor,
+    blocksize: int,
+    dtype: torch.dtype,
+    out: torch.Tensor = None,
 ) -> torch.Tensor:
     if ipex_xpu is None or not _ipex_xpu_version_prereq(2, 7):
         raise RuntimeError("Please install intel_extension_for_ipex >= 2.7 for 8bit optimizer backend on XPU device.")
 
     # void cdequantize_blockwise_fp32(float *code, unsigned char *A, float *absmax, float *out, int blocksize, const int n, cudaStream_t stream)
-    if out.dtype == torch.float16:
+    if dtype == torch.float16:
         ipex.xpu.bitsandbytes.cdequantize_blockwise_fp16(code, A, absmax, out, blocksize, A.numel())
-    elif out.dtype == torch.bfloat16:
+    elif dtype == torch.bfloat16:
         ipex.xpu.bitsandbytes.cdequantize_blockwise_bf16(code, A, absmax, out, blocksize, A.numel())
-    elif out.dtype == torch.float32:
+    elif dtype == torch.float32:
         ipex.xpu.bitsandbytes.cdequantize_blockwise_fp32(code, A, absmax, out, blocksize, A.numel())
     else:
         raise ValueError(f"Blockwise quantization only supports 16/32-bit floats, but got {out.dtype}")

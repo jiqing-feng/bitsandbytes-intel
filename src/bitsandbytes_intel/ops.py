@@ -15,10 +15,11 @@ from .cpu_xpu_common import (
     quantize_blockwise_impl,
     dequantize_blockwise_impl,
     gemm_4bit_impl,
-    dequantize_blockwise,
+    dequantize_blockwise_ipex_impl,
     optimizer_update_8bit_blockwise,
     ipex_xpu,
     ipex_cpu_only,
+    _ipex_xpu_version_prereq,
 )
 
 print("Loading ops module")
@@ -136,6 +137,11 @@ def register_xpu_ops():
         return quantize_blockwise_impl(A, code, blocksize)
 
     # Register the dequantize_blockwise implementation
+    if _ipex_xpu_version_prereq(2, 7):
+        dequantize_blockwise = dequantize_blockwise_ipex_impl
+    else:
+        dequantize_blockwise = dequantize_blockwise_impl
+
     @torch.library.impl("bitsandbytes::dequantize_blockwise", "XPU")
     def dequantize_blockwise_xpu(
         A: torch.Tensor,
@@ -144,7 +150,7 @@ def register_xpu_ops():
         blocksize: int,
         dtype: torch.dtype,
     ) -> torch.Tensor:
-        return dequantize_blockwise_impl(A, absmax, code, blocksize, dtype)
+        return dequantize_blockwise(A, absmax, code, blocksize, dtype)
     @torch.library.impl("bitsandbytes::dequantize_blockwise.out", "XPU")
     def dequantize_blockwise_xpu_out(
         A: torch.Tensor,
@@ -154,7 +160,7 @@ def register_xpu_ops():
         dtype: torch.dtype,
         out: torch.Tensor,
     ) -> torch.Tensor:
-        return dequantize_blockwise_impl(A, absmax, code, blocksize, dtype, out)
+        return dequantize_blockwise(A, absmax, code, blocksize, dtype, out)
 
     # Register the gemv_4bit implementation
     @torch.library.impl("bitsandbytes::gemv_4bit", "XPU")
@@ -172,17 +178,6 @@ def register_xpu_ops():
         out: torch.Tensor = None,
     ) -> torch.Tensor:
         return gemm_4bit_impl(A, B, state=state, out=out)
-
-    # Register the dequantize_blockwise implementation
-    @torch.library.impl("bitsandbytes::dequantize_blockwise", "XPU")
-    def dequantize_blockwise_xpu(
-        A: torch.Tensor,
-        absmax: torch.Tensor = None,
-        code: torch.Tensor = None,
-        out: torch.Tensor = None,
-        blocksize: int = 4096,
-    ) -> torch.Tensor:
-        return dequantize_blockwise(A, absmax, code, out, blocksize)
 
     # Register the optimizer_update_8bit_blockwise implementation
     @torch.library.impl("bitsandbytes::optimizer_update_8bit_blockwise", "XPU")
@@ -335,8 +330,8 @@ def register_cpu_ops():
         return dequantize_4bit_impl(A, quant_state, absmax, blocksize, quant_type, out)
 
     # Register the quantize_blockwise implementation
-    @torch.library.impl("bitsandbytes::quantize_blockwise", "XPU")
-    def quantize_blockwise_xpu(
+    @torch.library.impl("bitsandbytes::quantize_blockwise", "CPU")
+    def quantize_blockwise_cpu(
         A: torch.Tensor,
         code: torch.Tensor,
         blocksize: int,
@@ -380,17 +375,6 @@ def register_cpu_ops():
         out: torch.Tensor = None,
     ) -> torch.Tensor:
         return gemm_4bit_impl(A, B, state=state, out=out)
-
-    # Register the dequantize_blockwise implementation
-    @torch.library.impl("bitsandbytes::dequantize_blockwise", "CPU")
-    def dequantize_blockwise_cpu(
-        A: torch.Tensor,
-        absmax: torch.Tensor = None,
-        code: torch.Tensor = None,
-        out: torch.Tensor = None,
-        blocksize: int = 4096,
-    ) -> torch.Tensor:
-        return dequantize_blockwise(A, absmax, code, out, blocksize)
 
     print("Successfully registered CPU implementation")
 
