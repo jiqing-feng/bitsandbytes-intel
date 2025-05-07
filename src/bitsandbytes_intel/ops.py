@@ -4,14 +4,16 @@ import math
 
 import torch
 
-from bitsandbytes.utils import QuantState
 from .cpu_xpu_common import (
+    QuantState,
     int8_linear_matmul_impl,
     int8_double_quant_impl,
     int8_vectorwise_quant_impl,
     int8_mm_dequant_impl,
     quantize_4bit_impl,
     dequantize_4bit_impl,
+    quantize_blockwise_impl,
+    dequantize_blockwise_impl,
     gemm_4bit_impl,
     dequantize_blockwise,
     optimizer_update_8bit_blockwise,
@@ -32,7 +34,7 @@ def register_xpu_ops():
     @torch.library.impl("bitsandbytes::int8_linear_matmul.out", "XPU")
     def int8_linear_matmul_xpu_out(A: torch.Tensor, B: torch.Tensor, out: torch.Tensor):
         return int8_linear_matmul_impl(A, B, out)
-    
+
     # Register the int8_double_quant implementation
     @torch.library.impl("bitsandbytes::int8_double_quant", "XPU")
     def int8_double_quant_xpu(
@@ -52,7 +54,7 @@ def register_xpu_ops():
         out_row: torch.Tensor = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         return int8_double_quant_impl(A, threshold, col_stats, row_stats, out_col, out_row)
-    
+
     # Register the int8_vectorwise_quant implementation
     @torch.library.impl("bitsandbytes::int8_vectorwise_quant", "XPU")
     def int8_vectorwise_quant_xpu(
@@ -60,7 +62,7 @@ def register_xpu_ops():
         threshold: float = 0.0,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         return int8_vectorwise_quant_impl(A, threshold)
-    
+
     # Register the int8_mm_dequant implementation
     @torch.library.impl("bitsandbytes::int8_mm_dequant", "XPU")
     def int8_mm_dequant_xpu(
@@ -83,7 +85,7 @@ def register_xpu_ops():
         out: torch.Tensor = None,
     ) -> torch.Tensor:
         return int8_mm_dequant_impl(A, row_stats, col_stats, bias, compute_dtype, output_dtype, out)
-    
+
     # Register the quantize_4bit implementation
     @torch.library.impl("bitsandbytes::quantize_4bit", "XPU")
     def quantize_4bit_xpu(
@@ -102,26 +104,7 @@ def register_xpu_ops():
             quant_type,
             quant_storage,
         )
-    @torch.library.impl("bitsandbytes::quantize_4bit.out", "XPU")
-    def quantize_4bit_xpu_out(
-        A: torch.Tensor,
-        absmax: torch.Tensor = None,
-        blocksize=64,
-        compress_statistics=False,
-        quant_type="nf4",
-        quant_storage=torch.uint8,
-        out: torch.Tensor = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        return quantize_4bit_impl(
-            A,
-            absmax,
-            blocksize,
-            compress_statistics,
-            quant_type,
-            quant_storage,
-            out,
-        )
-    
+
     # Register the dequantize_4bit implementation
     @torch.library.impl("bitsandbytes::dequantize_4bit", "XPU")
     def dequantize_4bit_xpu(
@@ -142,7 +125,37 @@ def register_xpu_ops():
         out: torch.Tensor = None,
     ) -> torch.Tensor:
         return dequantize_4bit_impl(A, quant_state, absmax, blocksize, quant_type, out)
-    
+
+    # Register the quantize_blockwise implementation
+    @torch.library.impl("bitsandbytes::quantize_blockwise", "XPU")
+    def quantize_blockwise_xpu(
+        A: torch.Tensor,
+        code: torch.Tensor,
+        blocksize: int,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        return quantize_blockwise_impl(A, code, blocksize)
+
+    # Register the dequantize_blockwise implementation
+    @torch.library.impl("bitsandbytes::dequantize_blockwise", "XPU")
+    def dequantize_blockwise_xpu(
+        A: torch.Tensor,
+        absmax: torch.Tensor,
+        code: torch.Tensor,
+        blocksize: int,
+        dtype: torch.dtype,
+    ) -> torch.Tensor:
+        return dequantize_blockwise_impl(A, absmax, code, blocksize, dtype)
+    @torch.library.impl("bitsandbytes::dequantize_blockwise.out", "XPU")
+    def dequantize_blockwise_xpu_out(
+        A: torch.Tensor,
+        absmax: torch.Tensor,
+        code: torch.Tensor,
+        blocksize: int,
+        dtype: torch.dtype,
+        out: torch.Tensor,
+    ) -> torch.Tensor:
+        return dequantize_blockwise_impl(A, absmax, code, blocksize, dtype, out)
+
     # Register the gemv_4bit implementation
     @torch.library.impl("bitsandbytes::gemv_4bit", "XPU")
     def gemv_4bit_xpu(
@@ -159,7 +172,7 @@ def register_xpu_ops():
         out: torch.Tensor = None,
     ) -> torch.Tensor:
         return gemm_4bit_impl(A, B, state=state, out=out)
-    
+
     # Register the dequantize_blockwise implementation
     @torch.library.impl("bitsandbytes::dequantize_blockwise", "XPU")
     def dequantize_blockwise_xpu(
@@ -170,7 +183,7 @@ def register_xpu_ops():
         blocksize: int = 4096,
     ) -> torch.Tensor:
         return dequantize_blockwise(A, absmax, code, out, blocksize)
-    
+
     # Register the optimizer_update_8bit_blockwise implementation
     @torch.library.impl("bitsandbytes::optimizer_update_8bit_blockwise", "XPU")
     def optimizer_update_8bit_blockwise_xpu(
@@ -229,7 +242,7 @@ def register_cpu_ops():
     @torch.library.impl("bitsandbytes::int8_linear_matmul.out", "CPU")
     def int8_linear_matmul_cpu_out(A: torch.Tensor, B: torch.Tensor, out: torch.Tensor):
         return int8_linear_matmul_impl(A, B, out)
-    
+
     # Register the int8_double_quant implementation
     @torch.library.impl("bitsandbytes::int8_double_quant", "CPU")
     def int8_double_quant_cpu(
@@ -257,7 +270,7 @@ def register_cpu_ops():
         threshold: float = 0.0,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         return int8_vectorwise_quant_impl(A, threshold)
-    
+
     # Register the int8_mm_dequant implementation
     @torch.library.impl("bitsandbytes::int8_mm_dequant", "CPU")
     def int8_mm_dequant_cpu(
@@ -280,7 +293,7 @@ def register_cpu_ops():
         out: torch.Tensor = None,
     ) -> torch.Tensor:
         return int8_mm_dequant_impl(A, row_stats, col_stats, bias, compute_dtype, output_dtype, out)
-    
+
     # Register the quantize_4bit implementation
     @torch.library.impl("bitsandbytes::quantize_4bit", "CPU")
     def quantize_4bit_cpu(
@@ -299,26 +312,7 @@ def register_cpu_ops():
             quant_type,
             quant_storage,
         )
-    @torch.library.impl("bitsandbytes::quantize_4bit.out", "CPU")
-    def quantize_4bit_cpu_out(
-        A: torch.Tensor,
-        absmax: torch.Tensor = None,
-        blocksize=64,
-        compress_statistics=False,
-        quant_type="nf4",
-        quant_storage=torch.uint8,
-        out: torch.Tensor = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        return quantize_4bit_impl(
-            A,
-            absmax,
-            blocksize,
-            compress_statistics,
-            quant_type,
-            quant_storage,
-            out,
-        )
-    
+
     # Register the dequantize_4bit implementation
     @torch.library.impl("bitsandbytes::dequantize_4bit", "CPU")
     def dequantize_4bit_cpu(
@@ -339,7 +333,37 @@ def register_cpu_ops():
         out: torch.Tensor = None,
     ) -> torch.Tensor:
         return dequantize_4bit_impl(A, quant_state, absmax, blocksize, quant_type, out)
-    
+
+    # Register the quantize_blockwise implementation
+    @torch.library.impl("bitsandbytes::quantize_blockwise", "XPU")
+    def quantize_blockwise_xpu(
+        A: torch.Tensor,
+        code: torch.Tensor,
+        blocksize: int,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        return quantize_blockwise_impl(A, code, blocksize)
+
+    # Register the dequantize_blockwise implementation
+    @torch.library.impl("bitsandbytes::dequantize_blockwise", "CPU")
+    def dequantize_blockwise_cpu(
+        A: torch.Tensor,
+        absmax: torch.Tensor,
+        code: torch.Tensor,
+        blocksize: int,
+        dtype: torch.dtype,
+    ) -> torch.Tensor:
+        return dequantize_blockwise_impl(A, absmax, code, blocksize, dtype)
+    @torch.library.impl("bitsandbytes::dequantize_blockwise.out", "CPU")
+    def dequantize_blockwise_cpu_out(
+        A: torch.Tensor,
+        absmax: torch.Tensor,
+        code: torch.Tensor,
+        blocksize: int,
+        dtype: torch.dtype,
+        out: torch.Tensor,
+    ) -> torch.Tensor:
+        return dequantize_blockwise_impl(A, absmax, code, blocksize, dtype, out)
+
     # Register the gemv_4bit implementation
     @torch.library.impl("bitsandbytes::gemv_4bit", "CPU")
     def gemv_4bit_cpu(
@@ -356,7 +380,7 @@ def register_cpu_ops():
         out: torch.Tensor = None,
     ) -> torch.Tensor:
         return gemm_4bit_impl(A, B, state=state, out=out)
-    
+
     # Register the dequantize_blockwise implementation
     @torch.library.impl("bitsandbytes::dequantize_blockwise", "CPU")
     def dequantize_blockwise_cpu(

@@ -5,7 +5,6 @@ import warnings
 import torch
 import torch.nn.functional as F
 
-from bitsandbytes.utils import QuantState
 from bitsandbytes.functional import (
     QuantState,
     create_dynamic_map,
@@ -353,18 +352,105 @@ FP4_QUANT_TABLE = {
     0.8333333: 3,  # 0b0011
 }
 
-INT8_QUANT_TABLE = create_dynamic_map().tolist()
+# INT8_QUANT_TABLE = create_dynamic_map().tolist()
+
+
+def quantize_blockwise_impl(
+    A: torch.Tensor,
+    code: torch.Tensor,
+    blocksize: int,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Quantize tensor A in blocks of 8-bit values.
+
+    Quantizes tensor A by dividing it into blocks which are independently quantized to int8.
+
+    Parameters
+    ----------
+    A : torch.Tensor
+        The input tensor.
+    code : torch.Tensor
+        The quantization code.
+    blocksize : int
+        The blocksize used in quantization.
+
+    Returns
+    -------
+    torch.Tensor:
+        The 8-bit tensor with packed 4-bit values.
+    torch.Tensor:
+        The absmax.
+    """
+    n = A.numel()
+    blocks = n // blocksize
+    blocks += 1 if n % blocksize > 0 else 0
+    absmax = torch.zeros((blocks,), device=A.device, dtype=A.dtype)
+
+    if out is None:
+        out = torch.zeros(((n + 1) // 2), dtype=torch.uint8, device=A.device)
+
+    rem = n % blocksize
+    has_rem = rem > 0
+
+    # Scale tensor to [-1, 1]
+    A_reshaped = A.reshape(n)
+    A_com = A_reshaped[: n - rem]
+    A_com_reshaped = A_com.reshape(n // blocksize, blocksize)
+    absmax[: blocks - has_rem] = torch.abs(A_com_reshaped).max(dim=-1)[0]
+    scaled_A = torch.clamp(A_com_reshaped * (1 / absmax[: blocks - has_rem].view(-1, 1)), -1, 1)
+    scaled_A = scaled_A.reshape(-1)
+    if has_rem:
+        absmax[-1] = torch.abs(A_reshaped[n - rem :]).max()
+        scaled_A_rem = torch.clamp(A_reshaped[n - rem :] * (1 / absmax[-1]), -1, 1)
+        scaled_A = torch.cat([scaled_A, scaled_A_rem], dim=0)
+
+    map = torch.tensor(code, device=scaled_A.device)
+    diff = torch.abs(scaled_A.unsqueeze(-1) - map)
+    out_uint8 = torch.argmin(diff, dim=-1).to(torch.uint8).to(scaled_A.device)
+    
+    return out_uint8, absmax
+
+
+def dequantize_blockwise_impl(
+    A: torch.Tensor,
+    absmax: torch.Tensor,
+    code: torch.Tensor,
+    blocksize: int,
+    dtype: torch.dtype,
+    out: torch.Tensor = None,
+) -> torch.Tensor:
+    assert A.dtype == torch.uint8
+    out = code[A.reshape(-1).int()]
+    blocks = out.shape[-1] // blocksize
+    res = out.shape[-1] % blocksize
+    if res != 0:
+        out = F.pad(out, (0, blocksize - res), mode="constant", value=0)
+    out = (out.view(-1, blocksize) * absmax.view(-1, 1)).to(dtype).reshape(-1)
+    out = out[: blocks * blocksize + res]
+    out = out.reshape(A.shape)
+    return out
+
+
+# def dequant_8bit(A, offset, quant_state):
+#     assert A.dtype == torch.uint8
+#     absmax = quant_state.code[A.reshape(-1).int()]
+#     blocks = absmax.shape[-1] // 256
+#     res = absmax.shape[-1] % 256
+#     if res != 0:
+#         absmax = F.pad(absmax, (0, 256 - res), mode="constant", value=0)
+#     absmax = (absmax.view(-1, 256) * quant_state.absmax.view(-1, 1)).to(quant_state.dtype).reshape(-1)
+#     absmax = absmax[: blocks * 256 + res]
+#     absmax = absmax.reshape(A.shape)
+#     absmax += offset
+#     return absmax
 
 
 def quantize_4bit_impl(
     A: Tensor,
-    absmax: Tensor = None,
     blocksize=64,
-    compress_statistics=False,
     quant_type="nf4",
     quant_storage=torch.uint8,
-    out: Tensor = None,
-) -> Tensor:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Quantize tensor A in blocks of 4-bit values.
 
@@ -374,10 +460,6 @@ def quantize_4bit_impl(
     ----------
     A : torch.Tensor
         The input tensor.
-    absmax : torch.Tensor
-        The absmax values.
-    out : torch.Tensor
-        The output tensor (8-bit).
     blocksize : int
         The blocksize used in quantization.
     quant_type : str
@@ -389,8 +471,8 @@ def quantize_4bit_impl(
     -------
     torch.Tensor:
         The 8-bit tensor with packed 4-bit values.
-    tuple(torch.Tensor, torch.Size, torch.dtype, int):
-        The quantization state to undo the quantization.
+    torch.Tensor:
+        The absmax.
     """
     if quant_type not in ["nf4", "fp4", "int8"]:
         raise NotImplementedError(f"4-bit quantization data type {quant_type} is not implemented for CPU/XPU.")
@@ -398,12 +480,9 @@ def quantize_4bit_impl(
         warnings.warn("fp4 quantization is currently slow on CPU/XPU. Please Use nf4 instead for better performance.")
     assert blocksize in [4096, 2048, 1024, 512, 256, 128, 64]
     n = A.numel()
-    input_shape = A.shape
     blocks = n // blocksize
     blocks += 1 if n % blocksize > 0 else 0
-
-    if absmax is None:
-        absmax = torch.zeros((blocks,), device=A.device, dtype=A.dtype)
+    absmax = torch.zeros((blocks,), device=A.device, dtype=A.dtype)
 
     if out is None:
         out = torch.zeros(((n + 1) // 2), dtype=torch.uint8, device=A.device)
@@ -433,64 +512,16 @@ def quantize_4bit_impl(
         for key, val in FP4_QUANT_TABLE.items():
             out_uint8[abs_scaled_A > key] = val
         out_uint8 += sign.to(torch.uint8) * 8
-    elif quant_type == "int8":
-        map = torch.tensor(INT8_QUANT_TABLE, device=scaled_A.device)
-        diff = torch.abs(scaled_A.unsqueeze(-1) - map)
-        out_uint8 = torch.argmin(diff, dim=-1).to(torch.uint8).to(scaled_A.device)
 
-    if quant_type == "int8":
-        out = out_uint8
-        code = torch.Tensor(INT8_QUANT_TABLE).to(A.device)
-    else:
-        if out_uint8.size(-1) % 2:
-            out_uint8 = torch.nn.functional.pad(out_uint8, (0, 1), value=0)
-        out[:] = out_uint8[::2].bitwise_left_shift(4).bitwise_or_(out_uint8[1::2])
-        code = get_4bit_type(quant_type, device=A.device)
-
-    if compress_statistics:
-        offset = absmax.mean()
-        absmax -= offset
-        qabsmax, state2 = quantize_4bit_impl(absmax, blocksize=256, quant_type="int8")
-        del absmax
-        state = QuantState(
-            absmax=qabsmax,
-            shape=input_shape,
-            dtype=A.dtype,
-            blocksize=blocksize,
-            code=code,
-            quant_type=quant_type,
-            offset=offset,
-            state2=state2,
-        )
-    else:
-        state = QuantState(
-            absmax=absmax,
-            shape=input_shape,
-            dtype=A.dtype,
-            blocksize=blocksize,
-            code=code,
-            quant_type=quant_type,
-        )
+    if out_uint8.size(-1) % 2:
+        out_uint8 = torch.nn.functional.pad(out_uint8, (0, 1), value=0)
+    out[:] = out_uint8[::2].bitwise_left_shift(4).bitwise_or_(out_uint8[1::2])
 
     if quant_storage != torch.uint8:
         bytes_value = out.cpu().numpy().tobytes()
         out = torch.frombuffer(bytes_value, dtype=quant_storage).to(A.device)
 
-    return out.reshape(-1, 1), state
-
-
-def dequant_8bit(A, offset, quant_state):
-    assert A.dtype == torch.uint8
-    absmax = quant_state.code[A.reshape(-1).int()]
-    blocks = absmax.shape[-1] // 256
-    res = absmax.shape[-1] % 256
-    if res != 0:
-        absmax = F.pad(absmax, (0, 256 - res), mode="constant", value=0)
-    absmax = (absmax.view(-1, 256) * quant_state.absmax.view(-1, 1)).to(quant_state.dtype).reshape(-1)
-    absmax = absmax[: blocks * 256 + res]
-    absmax = absmax.reshape(A.shape)
-    absmax += offset
-    return absmax
+    return out.reshape(-1, 1), absmax
 
 
 # Compile will fail in torch.frombuffer
@@ -557,9 +588,6 @@ def dequantize_4bit_impl(
         raise NotImplementedError(
             f"4-bit quantization data type {quant_state.quant_type} is not implemented for CPU/XPU."
         )
-
-    if quant_state.nested:
-        absmax = dequant_8bit(absmax, quant_state.offset, quant_state.state2)
 
     if ipex_cpu_only and _ipex_cpu_version_prereq(2, 5) and getattr(quant_state, "ipex", False):
         ipex_weight = torch.ops.ipex_prepack.woq_linear_unpack_weight(A, "nf4", quant_state.shape, 2)
@@ -678,17 +706,7 @@ def dequantize_blockwise(
         ipex.xpu.bitsandbytes.cdequantize_blockwise_fp32(code, A, absmax, out, blocksize, A.numel())
     else:
         raise ValueError(f"Blockwise quantization only supports 16/32-bit floats, but got {out.dtype}")
-    
 
-def quantize_blockwise(
-    A: torch.Tensor,
-    code: Optional[torch.Tensor] = None,
-    absmax: Optional[torch.Tensor] = None,
-    out: Optional[torch.Tensor] = None,
-    blocksize=4096,
-    nested=False,
-) -> Tuple[torch.Tensor, QuantState]:
-    raise NotImplementedError
 
 def optimizer_update_8bit_blockwise(
     optimizer_name: str,
