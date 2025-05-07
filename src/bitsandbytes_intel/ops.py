@@ -91,17 +91,13 @@ def register_xpu_ops():
     @torch.library.impl("bitsandbytes::quantize_4bit", "XPU")
     def quantize_4bit_xpu(
         A: torch.Tensor,
-        absmax: torch.Tensor = None,
         blocksize=64,
-        compress_statistics=False,
         quant_type="nf4",
         quant_storage=torch.uint8,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         return quantize_4bit_impl(
             A,
-            absmax,
             blocksize,
-            compress_statistics,
             quant_type,
             quant_storage,
         )
@@ -293,17 +289,13 @@ def register_cpu_ops():
     @torch.library.impl("bitsandbytes::quantize_4bit", "CPU")
     def quantize_4bit_cpu(
         A: torch.Tensor,
-        absmax: torch.Tensor = None,
         blocksize=64,
-        compress_statistics=False,
         quant_type="nf4",
         quant_storage=torch.uint8,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         return quantize_4bit_impl(
             A,
-            absmax,
             blocksize,
-            compress_statistics,
             quant_type,
             quant_storage,
         )
