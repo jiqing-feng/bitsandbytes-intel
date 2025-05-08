@@ -5,7 +5,6 @@ from typing import Optional
 import torch
 
 from .xpu import (
-    QuantState,
     _ipex_xpu_version_prereq,
     dequantize_4bit_impl,
     dequantize_blockwise_ipex_impl,
@@ -102,9 +101,12 @@ def register_xpu_ops():
     def gemv_4bit_xpu(
         A: torch.Tensor,
         B: torch.Tensor,
-        state: QuantState = None,
+        shapeB: Sequence[int],
+        absmax: torch.Tensor,
+        code: torch.Tensor,
+        blocksize: int,
     ) -> torch.Tensor:
-        return gemv_4bit_impl(A, B, state=state)
+        return gemv_4bit_impl(A, B, shapeB, absmax, code, blocksize)
 
     # Register the optimizer_update_8bit_blockwise implementation
     @torch.library.impl("bitsandbytes::optimizer_update_8bit_blockwise", "xpu")
