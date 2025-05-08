@@ -1,25 +1,22 @@
 from collections.abc import Sequence
-from typing import Optional
 import math
+from typing import Optional
 
 import torch
 
-from .cpu_xpu_common import (
+from .xpu import (
     QuantState,
-    int8_linear_matmul_impl,
-    int8_double_quant_impl,
-    int8_vectorwise_quant_impl,
-    int8_mm_dequant_impl,
-    quantize_4bit_impl,
-    dequantize_4bit_impl,
-    quantize_blockwise_impl,
-    dequantize_blockwise_impl,
-    gemm_4bit_impl,
-    dequantize_blockwise_ipex_impl,
-    optimizer_update_8bit_blockwise,
-    ipex_xpu,
-    ipex_cpu_only,
     _ipex_xpu_version_prereq,
+    dequantize_4bit_impl,
+    dequantize_blockwise_impl,
+    dequantize_blockwise_ipex_impl,
+    gemv_4bit_impl,
+    int8_linear_matmul_impl,
+    int8_mm_dequant_impl,
+    ipex_xpu,
+    optimizer_update_8bit_blockwise,
+    quantize_4bit_impl,
+    quantize_blockwise_impl,
 )
 
 print("Loading ops module")
@@ -29,71 +26,32 @@ def register_xpu_ops():
     print("Registering XPU implementations")
 
     # Register the int8_linear_matmul implementation
-    @torch.library.impl("bitsandbytes::int8_linear_matmul", "XPU")
+    @torch.library.impl("bitsandbytes::int8_linear_matmul", "xpu")
     def int8_linear_matmul_xpu(A: torch.Tensor, B: torch.Tensor):
-       return int8_linear_matmul_impl(A, B)
-    @torch.library.impl("bitsandbytes::int8_linear_matmul.out", "XPU")
+        return int8_linear_matmul_impl(A, B)
+
+    @torch.library.impl("bitsandbytes::int8_linear_matmul.out", "xpu")
     def int8_linear_matmul_xpu_out(A: torch.Tensor, B: torch.Tensor, out: torch.Tensor):
-        return int8_linear_matmul_impl(A, B, out)
-
-    # Register the int8_double_quant implementation
-    @torch.library.impl("bitsandbytes::int8_double_quant", "XPU")
-    def int8_double_quant_xpu(
-        A: torch.Tensor,
-        threshold: float = 0.0,
-        col_stats: torch.Tensor = None,
-        row_stats: torch.Tensor = None,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        return int8_double_quant_impl(A, threshold, col_stats, row_stats)
-    @torch.library.impl("bitsandbytes::int8_double_quant.out", "XPU")
-    def int8_double_quant_xpu_out(
-        A: torch.Tensor,
-        threshold: float = 0.0,
-        col_stats: torch.Tensor = None,
-        row_stats: torch.Tensor = None,
-        out_col: torch.Tensor = None,
-        out_row: torch.Tensor = None,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        return int8_double_quant_impl(A, threshold, col_stats, row_stats, out_col, out_row)
-
-    # Register the int8_vectorwise_quant implementation
-    @torch.library.impl("bitsandbytes::int8_vectorwise_quant", "XPU")
-    def int8_vectorwise_quant_xpu(
-        A: torch.Tensor,
-        threshold: float = 0.0,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        return int8_vectorwise_quant_impl(A, threshold)
+        return int8_linear_matmul_impl(A, B)
 
     # Register the int8_mm_dequant implementation
-    @torch.library.impl("bitsandbytes::int8_mm_dequant", "XPU")
+    @torch.library.impl("bitsandbytes::int8_mm_dequant", "xpu")
     def int8_mm_dequant_xpu(
         A: torch.Tensor,
         row_stats: torch.Tensor,
         col_stats: torch.Tensor,
-        bias: torch.Tensor = None,
-        compute_dtype=torch.float32,
-        output_dtype=torch.float32,
+        dtype: Optional[torch.dtype] = None,
+        bias: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        return int8_mm_dequant_impl(A, row_stats, col_stats, bias, compute_dtype, output_dtype)
-    @torch.library.impl("bitsandbytes::int8_mm_dequant.out", "XPU")
-    def int8_mm_dequant_xpu_out(
-        A: torch.Tensor,
-        row_stats: torch.Tensor,
-        col_stats: torch.Tensor,
-        bias: torch.Tensor = None,
-        compute_dtype = torch.float32,
-        output_dtype = torch.float32,
-        out: torch.Tensor = None,
-    ) -> torch.Tensor:
-        return int8_mm_dequant_impl(A, row_stats, col_stats, bias, compute_dtype, output_dtype, out)
+        return int8_mm_dequant_impl(A, row_stats, col_stats, dtype, bias)
 
     # Register the quantize_4bit implementation
-    @torch.library.impl("bitsandbytes::quantize_4bit", "XPU")
+    @torch.library.impl("bitsandbytes::quantize_4bit", "xpu")
     def quantize_4bit_xpu(
         A: torch.Tensor,
-        blocksize=64,
-        quant_type="nf4",
-        quant_storage=torch.uint8,
+        blocksize: int,
+        quant_type: str,
+        quant_storage: torch.dtype,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         return quantize_4bit_impl(
             A,
@@ -103,28 +61,20 @@ def register_xpu_ops():
         )
 
     # Register the dequantize_4bit implementation
-    @torch.library.impl("bitsandbytes::dequantize_4bit", "XPU")
+    @torch.library.impl("bitsandbytes::dequantize_4bit", "xpu")
     def dequantize_4bit_xpu(
         A: torch.Tensor,
-        quant_state = None,
-        absmax: torch.Tensor = None,
-        blocksize: int = 64,
-        quant_type = "nf4",
+        absmax: torch.Tensor,
+        blocksize: int,
+        quant_type: str,
+        shape: Sequence[int],
+        dtype: torch.dtype,
     ) -> torch.Tensor:
-        return dequantize_4bit_impl(A, quant_state, absmax, blocksize, quant_type)
-    @torch.library.impl("bitsandbytes::dequantize_4bit.out", "XPU")
-    def dequantize_4bit_xpu_out(
-        A: torch.Tensor,
-        quant_state = None,
-        absmax: torch.Tensor = None,
-        blocksize: int = 64,
-        quant_type = "nf4",
-        out: torch.Tensor = None,
-    ) -> torch.Tensor:
-        return dequantize_4bit_impl(A, quant_state, absmax, blocksize, quant_type, out)
+        out = torch.empty(shape, dtype=dtype, device=A.device)
+        return dequantize_4bit_impl(A, absmax, blocksize, quant_type, shape, dtype, out)
 
     # Register the quantize_blockwise implementation
-    @torch.library.impl("bitsandbytes::quantize_blockwise", "XPU")
+    @torch.library.impl("bitsandbytes::quantize_blockwise", "xpu")
     def quantize_blockwise_xpu(
         A: torch.Tensor,
         code: torch.Tensor,
@@ -138,7 +88,7 @@ def register_xpu_ops():
     else:
         dequantize_blockwise = dequantize_blockwise_impl
 
-    @torch.library.impl("bitsandbytes::dequantize_blockwise", "XPU")
+    @torch.library.impl("bitsandbytes::dequantize_blockwise", "xpu")
     def dequantize_blockwise_xpu(
         A: torch.Tensor,
         absmax: torch.Tensor,
@@ -147,36 +97,18 @@ def register_xpu_ops():
         dtype: torch.dtype,
     ) -> torch.Tensor:
         return dequantize_blockwise(A, absmax, code, blocksize, dtype)
-    @torch.library.impl("bitsandbytes::dequantize_blockwise.out", "XPU")
-    def dequantize_blockwise_xpu_out(
-        A: torch.Tensor,
-        absmax: torch.Tensor,
-        code: torch.Tensor,
-        blocksize: int,
-        dtype: torch.dtype,
-        out: torch.Tensor,
-    ) -> torch.Tensor:
-        return dequantize_blockwise(A, absmax, code, blocksize, dtype, out)
 
     # Register the gemv_4bit implementation
-    @torch.library.impl("bitsandbytes::gemv_4bit", "XPU")
+    @torch.library.impl("bitsandbytes::gemv_4bit", "xpu")
     def gemv_4bit_xpu(
         A: torch.Tensor,
         B: torch.Tensor,
         state: QuantState = None,
     ) -> torch.Tensor:
-        return gemm_4bit_impl(A, B, state=state)
-    @torch.library.impl("bitsandbytes::gemv_4bit.out", "XPU")
-    def gemv_4bit_xpu_out(
-        A: torch.Tensor,
-        B: torch.Tensor,
-        state: QuantState = None,
-        out: torch.Tensor = None,
-    ) -> torch.Tensor:
-        return gemm_4bit_impl(A, B, state=state, out=out)
+        return gemv_4bit_impl(A, B, state=state)
 
     # Register the optimizer_update_8bit_blockwise implementation
-    @torch.library.impl("bitsandbytes::optimizer_update_8bit_blockwise", "XPU")
+    @torch.library.impl("bitsandbytes::optimizer_update_8bit_blockwise", "xpu")
     def optimizer_update_8bit_blockwise_xpu(
         optimizer_name: str,
         g: torch.Tensor,
@@ -223,154 +155,6 @@ def register_xpu_ops():
     print("Successfully registered XPU implementation")
 
 
-def register_cpu_ops():
-    print("Registering CPU implementations")
-
-    # Register the int8_linear_matmul implementation
-    @torch.library.impl("bitsandbytes::int8_linear_matmul", "CPU")
-    def int8_linear_matmul_cpu(A: torch.Tensor, B: torch.Tensor):
-        return int8_linear_matmul_impl(A, B)
-    @torch.library.impl("bitsandbytes::int8_linear_matmul.out", "CPU")
-    def int8_linear_matmul_cpu_out(A: torch.Tensor, B: torch.Tensor, out: torch.Tensor):
-        return int8_linear_matmul_impl(A, B, out)
-
-    # Register the int8_double_quant implementation
-    @torch.library.impl("bitsandbytes::int8_double_quant", "CPU")
-    def int8_double_quant_cpu(
-        A: torch.Tensor,
-        threshold: float = 0.0,
-        col_stats: torch.Tensor = None,
-        row_stats: torch.Tensor = None,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        return int8_double_quant_impl(A, threshold, col_stats, row_stats)
-    @torch.library.impl("bitsandbytes::int8_double_quant.out", "CPU")
-    def int8_double_quant_cpu_out(
-        A: torch.Tensor,
-        threshold: float = 0.0,
-        col_stats: torch.Tensor = None,
-        row_stats: torch.Tensor = None,
-        out_col: torch.Tensor = None,
-        out_row: torch.Tensor = None,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        return int8_double_quant_impl(A, threshold, col_stats, row_stats, out_col, out_row)
-
-    # Register the int8_vectorwise_quant implementation
-    @torch.library.impl("bitsandbytes::int8_vectorwise_quant", "CPU")
-    def int8_vectorwise_quant_cpu(
-        A: torch.Tensor,
-        threshold: float = 0.0,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        return int8_vectorwise_quant_impl(A, threshold)
-
-    # Register the int8_mm_dequant implementation
-    @torch.library.impl("bitsandbytes::int8_mm_dequant", "CPU")
-    def int8_mm_dequant_cpu(
-        A: torch.Tensor,
-        row_stats: torch.Tensor,
-        col_stats: torch.Tensor,
-        bias: torch.Tensor = None,
-        compute_dtype=torch.float32,
-        output_dtype=torch.float32,
-    ) -> torch.Tensor:
-        return int8_mm_dequant_impl(A, row_stats, col_stats, bias, compute_dtype, output_dtype)
-    @torch.library.impl("bitsandbytes::int8_mm_dequant.out", "CPU")
-    def int8_mm_dequant_cpu_out(
-        A: torch.Tensor,
-        row_stats: torch.Tensor,
-        col_stats: torch.Tensor,
-        bias: torch.Tensor = None,
-        compute_dtype = torch.float32,
-        output_dtype = torch.float32,
-        out: torch.Tensor = None,
-    ) -> torch.Tensor:
-        return int8_mm_dequant_impl(A, row_stats, col_stats, bias, compute_dtype, output_dtype, out)
-
-    # Register the quantize_4bit implementation
-    @torch.library.impl("bitsandbytes::quantize_4bit", "CPU")
-    def quantize_4bit_cpu(
-        A: torch.Tensor,
-        blocksize=64,
-        quant_type="nf4",
-        quant_storage=torch.uint8,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        return quantize_4bit_impl(
-            A,
-            blocksize,
-            quant_type,
-            quant_storage,
-        )
-
-    # Register the dequantize_4bit implementation
-    @torch.library.impl("bitsandbytes::dequantize_4bit", "CPU")
-    def dequantize_4bit_cpu(
-        A: torch.Tensor,
-        quant_state = None,
-        absmax: torch.Tensor = None,
-        blocksize: int = 64,
-        quant_type = "nf4",
-    ) -> torch.Tensor:
-        return dequantize_4bit_impl(A, quant_state, absmax, blocksize, quant_type)
-    @torch.library.impl("bitsandbytes::dequantize_4bit.out", "CPU")
-    def dequantize_4bit_cpu_out(
-        A: torch.Tensor,
-        quant_state = None,
-        absmax: torch.Tensor = None,
-        blocksize: int = 64,
-        quant_type = "nf4",
-        out: torch.Tensor = None,
-    ) -> torch.Tensor:
-        return dequantize_4bit_impl(A, quant_state, absmax, blocksize, quant_type, out)
-
-    # Register the quantize_blockwise implementation
-    @torch.library.impl("bitsandbytes::quantize_blockwise", "CPU")
-    def quantize_blockwise_cpu(
-        A: torch.Tensor,
-        code: torch.Tensor,
-        blocksize: int,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        return quantize_blockwise_impl(A, code, blocksize)
-
-    # Register the dequantize_blockwise implementation
-    @torch.library.impl("bitsandbytes::dequantize_blockwise", "CPU")
-    def dequantize_blockwise_cpu(
-        A: torch.Tensor,
-        absmax: torch.Tensor,
-        code: torch.Tensor,
-        blocksize: int,
-        dtype: torch.dtype,
-    ) -> torch.Tensor:
-        return dequantize_blockwise_impl(A, absmax, code, blocksize, dtype)
-    @torch.library.impl("bitsandbytes::dequantize_blockwise.out", "CPU")
-    def dequantize_blockwise_cpu_out(
-        A: torch.Tensor,
-        absmax: torch.Tensor,
-        code: torch.Tensor,
-        blocksize: int,
-        dtype: torch.dtype,
-        out: torch.Tensor,
-    ) -> torch.Tensor:
-        return dequantize_blockwise_impl(A, absmax, code, blocksize, dtype, out)
-
-    # Register the gemv_4bit implementation
-    @torch.library.impl("bitsandbytes::gemv_4bit", "CPU")
-    def gemv_4bit_cpu(
-        A: torch.Tensor,
-        B: torch.Tensor,
-        state: QuantState = None,
-    ) -> torch.Tensor:
-        return gemm_4bit_impl(A, B, state=state)
-    @torch.library.impl("bitsandbytes::gemv_4bit.out", "CPU")
-    def gemv_4bit_cpu_out(
-        A: torch.Tensor,
-        B: torch.Tensor,
-        state: QuantState = None,
-        out: torch.Tensor = None,
-    ) -> torch.Tensor:
-        return gemm_4bit_impl(A, B, state=state, out=out)
-
-    print("Successfully registered CPU implementation")
-
-
 def register_hpu_ops():
     print("Registering HPU implementations")
 
@@ -410,10 +194,8 @@ def register_ops():
 
     if ipex_xpu:
         register_xpu_ops()
-    elif ipex_cpu_only:
-        register_cpu_ops()
     # TODO: Need to check HPU
-    else:
+    elif hasattr(torch.backends, "hpu") and torch.backends.hpu.is_available():
         register_hpu_ops()
 
 
