@@ -8,8 +8,8 @@ from .xpu import (
     QuantState,
     _ipex_xpu_version_prereq,
     dequantize_4bit_impl,
-    dequantize_blockwise_impl,
     dequantize_blockwise_ipex_impl,
+    dequantize_blockwise_torch_impl,
     gemv_4bit_impl,
     int8_linear_matmul_impl,
     int8_mm_dequant_impl,
@@ -83,10 +83,9 @@ def register_xpu_ops():
         return quantize_blockwise_impl(A, code, blocksize)
 
     # Register the dequantize_blockwise implementation
-    if _ipex_xpu_version_prereq(2, 7):
-        dequantize_blockwise = dequantize_blockwise_ipex_impl
-    else:
-        dequantize_blockwise = dequantize_blockwise_impl
+    dequantize_blockwise_impl = (
+        dequantize_blockwise_ipex_impl if _ipex_xpu_version_prereq(2, 7) else dequantize_blockwise_torch_impl
+    )
 
     @torch.library.impl("bitsandbytes::dequantize_blockwise", "xpu")
     def dequantize_blockwise_xpu(
@@ -96,7 +95,7 @@ def register_xpu_ops():
         blocksize: int,
         dtype: torch.dtype,
     ) -> torch.Tensor:
-        return dequantize_blockwise(A, absmax, code, blocksize, dtype)
+        return dequantize_blockwise_impl(A, absmax, code, blocksize, dtype)
 
     # Register the gemv_4bit implementation
     @torch.library.impl("bitsandbytes::gemv_4bit", "xpu")
