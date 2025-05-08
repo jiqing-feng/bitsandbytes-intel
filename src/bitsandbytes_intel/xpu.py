@@ -261,6 +261,8 @@ def dequantize_blockwise_ipex_impl(
     else:
         raise ValueError(f"Blockwise quantization only supports 16/32-bit floats, but got {out.dtype}")
 
+    return out
+
 
 # Copied from cpu quantize_4bit op
 def quantize_4bit_impl(
