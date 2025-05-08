@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 import subprocess
-from typing import Optional, tuple
+from typing import Optional
 import warnings
 
 import torch
