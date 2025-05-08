@@ -69,8 +69,7 @@ def register_xpu_ops():
         shape: Sequence[int],
         dtype: torch.dtype,
     ) -> torch.Tensor:
-        out = torch.empty(shape, dtype=dtype, device=A.device)
-        return dequantize_4bit_impl(A, absmax, blocksize, quant_type, shape, dtype, out)
+        return dequantize_4bit_impl(A, absmax, blocksize, quant_type, shape, dtype)
 
     # Register the quantize_blockwise implementation
     @torch.library.impl("bitsandbytes::quantize_blockwise", "xpu")
