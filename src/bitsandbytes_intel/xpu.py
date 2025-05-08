@@ -141,7 +141,7 @@ _NF4_QUANT_TABLE = torch.tensor(
         1.0,
     ],
     dtype=torch.float32,
-    device="cpu",
+    device="xpu",
 )
 _FP4_QUANT_TABLE = torch.tensor(
     [
@@ -163,7 +163,7 @@ _FP4_QUANT_TABLE = torch.tensor(
         -0.2500,
     ],
     dtype=torch.float32,
-    device="cpu",
+    device="xpu",
 )
 CODE = {"nf4": _NF4_QUANT_TABLE, "fp4": _FP4_QUANT_TABLE}
 
@@ -291,7 +291,7 @@ def quantize_4bit_impl(
         scaled_rem = torch.clamp(A_reshaped[n - rem :] * (1 / absmax[-1]), -1, 1)
         scaled = torch.cat([scaled, scaled_rem], dim=0)
     # Quantize with the lookup table
-    quant_table = CODE[quant_type]
+    quant_table = CODE[quant_type].to(scaled.device)
     quantized = torch.argmin(torch.abs(scaled.view(-1, 1) - quant_table), dim=-1, keepdim=True).to(torch.uint8)
 
     # Pack two quantized values per byte
@@ -334,7 +334,7 @@ def dequantize_4bit_impl(
     out_dq[1::2] = A & 0xF
     out_dq[::2] = A >> 4
     # code is fp32, cast to dtype to avoid the mismatch issue
-    code = CODE[quant_type].to(dtype)
+    code = CODE[quant_type].to(out_dq.device).to(dtype)
     out_dq = code[out_dq]
 
     # Apply scales
