@@ -195,12 +195,10 @@ def quantize_blockwise_impl(
         The absmax.
     """
     n = A.numel()
-    blocks = n // blocksize
-    blocks += 1 if n % blocksize > 0 else 0
-    absmax = torch.zeros((blocks,), device=A.device, dtype=A.dtype)
     rem = n % blocksize
     has_rem = rem > 0
-    # Scale tensor to [-1, 1]
+    blocks = n // blocksize + has_rem
+    absmax = torch.zeros((blocks,), device=A.device, dtype=A.dtype)
     A_reshaped = A.reshape(n)
     A_com = A_reshaped[: n - rem]
     A_com_reshaped = A_com.reshape(n // blocksize, blocksize)
@@ -213,7 +211,7 @@ def quantize_blockwise_impl(
         scaled_A = torch.cat([scaled_A, scaled_A_rem], dim=0)
 
     diff = torch.abs(scaled_A.unsqueeze(-1) - code.to(scaled_A.device))
-    out_uint8 = torch.argmin(diff, dim=-1).to(torch.uint8).to(scaled_A.device)
+    out_uint8 = torch.argmin(diff, dim=-1).to(torch.uint8).to(scaled_A.device).reshape(A.shape)
 
     return out_uint8, absmax
 
