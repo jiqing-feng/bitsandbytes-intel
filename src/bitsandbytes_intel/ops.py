@@ -12,6 +12,7 @@ from .xpu import (
     gemv_4bit_impl,
     int8_linear_matmul_impl,
     int8_mm_dequant_impl,
+    ipex_cpu,
     ipex_xpu,
     optimizer_update_8bit_blockwise,
     quantize_4bit_impl,
@@ -187,16 +188,61 @@ def register_hpu_ops():
     print("Successfully registered HPU implementations")
 
 
+def register_ipex_ops():
+    print("Registering IPEX implementations")
+
+    # Register the dequantize_nf4_ipex implementation
+    if ipex_cpu:
+        from bitsandbytes.utils import _reverse_4bit_compress_format
+
+        @torch.library.impl("bitsandbytes::dequantize_nf4_ipex", "cpu")
+        def dequantize_nf4_ipex_cpu(
+            A: torch.Tensor,
+            absmax: torch.Tensor,
+            blocksize: int,
+            quant_type: str,
+            shape: Sequence[int],
+            dtype: torch.dtype,
+        ) -> torch.Tensor:
+            ipex_weight = torch.ops.ipex_prepack.woq_linear_unpack_weight(A, "nf4", shape, 2)
+            A = _reverse_4bit_compress_format(ipex_weight.reshape(-1)).reshape(1, -1)
+            return torch.ops.bitsandbytes.dequantize_4bit.default(
+                A,
+                absmax,
+                blocksize,
+                "nf4",
+                shape,
+                dtype,
+            )
+
+    if ipex_xpu:
+
+        @torch.library.impl("bitsandbytes::dequantize_nf4_ipex", "xpu")
+        def dequantize_nf4_ipex_xpu(
+            A: torch.Tensor,
+            absmax: torch.Tensor,
+            blocksize: int,
+            quant_type: str,
+            shape: Sequence[int],
+            dtype: torch.dtype,
+        ) -> torch.Tensor:
+            return torch.ops.torch_ipex.dequantize_4bit(A, "nf4", shape, absmax, None, blocksize).t().to(dtype)
+
+    print("Successfully registered IPEX implementation")
+
+
 def register_ops():
     # Check if the operator exists
     if not hasattr(torch.ops.bitsandbytes, "int8_linear_matmul"):
         raise RuntimeError("bitsandbytes::int8_linear_matmul not found! Make sure bitsandbytes is installed")
 
-    if ipex_xpu:
+    if hasattr(torch, "xpu") and torch.xpu.is_available():
         register_xpu_ops()
     # TODO: Need to check HPU
     elif hasattr(torch.backends, "hpu") and torch.backends.hpu.is_available():
         register_hpu_ops()
+    if ipex_cpu or ipex_xpu:
+        register_ipex_ops()
 
 
 print("ops module loaded")
