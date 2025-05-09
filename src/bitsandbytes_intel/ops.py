@@ -192,6 +192,24 @@ def register_ipex_ops():
     print("Registering IPEX implementations")
 
     # Register the dequantize_nf4_ipex implementation
+    torch.library.define(
+        "bitsandbytes::dequantize_nf4_ipex",
+        "(Tensor A, Tensor absmax, int blocksize, int[] shape, ScalarType dtype) -> Tensor",
+    )
+
+    @torch.library.register_fake("bitsandbytes::dequantize_nf4_ipex")
+    def dequantize_nf4_ipex(
+        A: torch.Tensor,
+        absmax: torch.Tensor,
+        blocksize: int,
+        shape: Sequence[int],
+        dtype: torch.dtype,
+    ) -> torch.Tensor:
+        raise NotImplementedError(
+            "bitsandbytes::dequantize_nf4_ipex is not implemented for default backend. "
+            "Please make sure you installed ipex to support Intel CPU or XPU."
+        )
+
     if ipex_cpu:
         from bitsandbytes.utils import _reverse_4bit_compress_format
 
@@ -200,7 +218,6 @@ def register_ipex_ops():
             A: torch.Tensor,
             absmax: torch.Tensor,
             blocksize: int,
-            quant_type: str,
             shape: Sequence[int],
             dtype: torch.dtype,
         ) -> torch.Tensor:
@@ -222,7 +239,6 @@ def register_ipex_ops():
             A: torch.Tensor,
             absmax: torch.Tensor,
             blocksize: int,
-            quant_type: str,
             shape: Sequence[int],
             dtype: torch.dtype,
         ) -> torch.Tensor:
