@@ -322,6 +322,9 @@ def dequantize_4bit_impl(
     # Enable non uint8 dtype
     device = A.device
     if A.dtype != torch.uint8:
+        if A.dtype == torch.bfloat16:
+            # Numpy does not support bfloat16
+            A = A.view(torch.float16)
         bytes_value = A.cpu().numpy().tobytes()
         A = torch.frombuffer(bytes_value, dtype=torch.uint8).to(device)
 
