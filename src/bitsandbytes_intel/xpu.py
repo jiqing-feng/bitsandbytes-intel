@@ -276,18 +276,16 @@ def quantize_4bit_impl(
     )
 
     n = A.numel()
-    blocks = n // blocksize
-    blocks += 1 if n % blocksize > 0 else 0
     rem = n % blocksize
     has_rem = rem > 0
+    blocks = n // blocksize + has_rem
 
     # Scale tensor to [-1, 1]
     absmax = torch.zeros((blocks,), device=A.device, dtype=A.dtype)
     A_reshaped = A.reshape(n)
     A_com_reshaped = A_reshaped[: n - rem].reshape(n // blocksize, blocksize)
     absmax[: blocks - has_rem] = torch.abs(A_com_reshaped).max(dim=-1)[0]
-    scaled = torch.clamp(A_com_reshaped * (1 / absmax[: blocks - has_rem].view(-1, 1)), -1, 1)
-    scaled = scaled.reshape(-1)
+    scaled = torch.clamp(A_com_reshaped * (1 / absmax[: blocks - has_rem].view(-1, 1)), -1, 1).reshape(-1)
     if has_rem:
         absmax[-1] = torch.abs(A_reshaped[n - rem :]).max()
         scaled_rem = torch.clamp(A_reshaped[n - rem :] * (1 / absmax[-1]), -1, 1)
@@ -343,10 +341,10 @@ def dequantize_4bit_impl(
     if out_dq.numel() != n:
         assert out_dq.numel() == n + 1
         out_dq = torch.narrow(out_dq, 0, 0, n)
-    blocks = n // blocksize
-    blocks += 1 if n % blocksize > 0 else 0
+
     rem = n % blocksize
     has_rem = rem > 0
+    blocks = n // blocksize + has_rem
 
     out = torch.empty(shape, dtype=dtype, device=A.device).reshape(-1)
     if has_rem:
@@ -370,12 +368,8 @@ def gemv_4bit_impl(
     blocksize: int,
 ) -> torch.Tensor:
     # Applied from dequantize_4bit
-    B = B.view(-1, 1)
-    upper = (B >> 4).to(torch.int64)
-    lower = (B & 0x0F).to(torch.int64)
-    blocks = torch.cat((upper, lower), dim=1).reshape(-1, blocksize)
-    B_dq = code[blocks] * absmax[:, None]
-    B_dq = B_dq.reshape(-1, *shapeB[1:]).to(A.dtype)
+    quant_type = "nf4" if code[1] > 0 else "fp4"
+    B_dq = dequantize_4bit_impl(B, absmax, blocksize, quant_type, shapeB, A.dtype)
 
     # User called gemv with B.t(), so we need to transpose it back.
     # if B.shape[0] == 1:
