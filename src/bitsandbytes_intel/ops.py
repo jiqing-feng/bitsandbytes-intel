@@ -30,10 +30,6 @@ def register_xpu_ops():
     def int8_linear_matmul_xpu(A: torch.Tensor, B: torch.Tensor):
         return int8_linear_matmul_impl(A, B)
 
-    @torch.library.impl("bitsandbytes::int8_linear_matmul.out", "xpu")
-    def int8_linear_matmul_xpu_out(A: torch.Tensor, B: torch.Tensor, out: torch.Tensor):
-        return int8_linear_matmul_impl(A, B)
-
     # Register the int8_mm_dequant implementation
     @torch.library.impl("bitsandbytes::int8_mm_dequant", "xpu")
     def int8_mm_dequant_xpu(
