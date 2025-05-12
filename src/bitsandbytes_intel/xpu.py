@@ -198,7 +198,7 @@ def quantize_blockwise_impl(
     rem = n % blocksize
     has_rem = rem > 0
     blocks = n // blocksize + has_rem
-    absmax = torch.zeros((blocks,), device=A.device, dtype=A.dtype)
+    absmax = torch.zeros((blocks,), device=A.device, dtype=torch.float32)
     A_reshaped = A.reshape(n)
     A_com = A_reshaped[: n - rem]
     A_com_reshaped = A_com.reshape(n // blocksize, blocksize)
@@ -247,6 +247,7 @@ def dequantize_blockwise_ipex_impl(
     if ipex_xpu is None or not _ipex_xpu_version_prereq(2, 7):
         raise RuntimeError("Please install intel_extension_for_ipex >= 2.7 for 8bit optimizer backend on XPU device.")
 
+    shape = A.shape
     out = torch.empty(A.reshape(-1).shape, dtype=dtype, device=A.device)
     # void cdequantize_blockwise_fp32(
     # float *code, unsigned char *A, float *absmax, float *out, int blocksize, const int n, cudaStream_t stream)
@@ -259,7 +260,7 @@ def dequantize_blockwise_ipex_impl(
     else:
         raise ValueError(f"Blockwise quantization only supports 16/32-bit floats, but got {out.dtype}")
 
-    return out
+    return out.reshape(shape)
 
 
 # Copied from cpu quantize_4bit op
@@ -279,7 +280,7 @@ def quantize_4bit_impl(
     blocks = n // blocksize + has_rem
 
     # Scale tensor to [-1, 1]
-    absmax = torch.zeros((blocks,), device=A.device, dtype=A.dtype)
+    absmax = torch.zeros((blocks,), device=A.device, dtype=torch.float32)
     A_reshaped = A.reshape(n)
     A_com_reshaped = A_reshaped[: n - rem].reshape(n // blocksize, blocksize)
     absmax[: blocks - has_rem] = torch.abs(A_com_reshaped).max(dim=-1)[0]
@@ -320,13 +321,8 @@ def dequantize_4bit_impl(
     )
 
     # Enable non uint8 dtype
-    device = A.device
     if A.dtype != torch.uint8:
-        if A.dtype == torch.bfloat16:
-            # Numpy does not support bfloat16
-            A = A.view(torch.float16)
-        bytes_value = A.cpu().numpy().tobytes()
-        A = torch.frombuffer(bytes_value, dtype=torch.uint8).to(device)
+        A = A.view(torch.uint8)
 
     A = A.reshape(-1)
     # Map nf4 to [-1, 1]
@@ -369,7 +365,7 @@ def gemv_4bit_impl(
     blocksize: int,
 ) -> torch.Tensor:
     # Applied from dequantize_4bit
-    quant_type = "nf4" if code[1] > 0 else "fp4"
+    quant_type = "fp4" if code[1] > 0 else "nf4"
     B_dq = dequantize_4bit_impl(B, absmax, blocksize, quant_type, shapeB, A.dtype)
 
     # User called gemv with B.t(), so we need to transpose it back.
